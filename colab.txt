@@ -1,0 +1,568 @@
+!pip install -q matplotlib scikit-learn pandas streamlit pyngrok joblib
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor, GradientBoostingRegressor
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.metrics import r2_score
+import joblib
+import warnings
+warnings.filterwarnings("ignore")
+
+
+import sklearn
+print(sklearn.__version__)
+
+
+from google.colab import files
+import io
+
+print("📂 Upload merged CSV file (with AQI):")
+uploaded = files.upload()
+csv_file = list(uploaded.keys())[0]
+
+df = pd.read_csv(io.BytesIO(uploaded[csv_file]))
+print(f"✅ Uploaded: {csv_file}")
+print(f"🔢 Shape: {df.shape}")
+df.head()
+
+
+df = pd.read_csv('/content/combined_air_quality_data.csv')
+display(df.head())
+
+
+
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+import joblib
+
+# Drop rows with missing values (if any)
+df = df.dropna()
+
+# Define features and target
+# Drop non-numeric columns like 'StationId', 'Date', and 'AQI_Bucket' as they cannot be directly used by RandomForestRegressor
+columns_to_drop = ['AQI', 'StationId', 'Date', 'AQI_Bucket']
+# Ensure only existing columns are dropped to avoid errors
+existing_columns_to_drop = [col for col in columns_to_drop if col in df.columns]
+X = df.drop(columns=existing_columns_to_drop)
+y = df['AQI']
+
+# Train/test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train Random Forest Regressor
+model = RandomForestRegressor(n_estimators=50, random_state=42)
+model.fit(X_train, y_train)
+
+# Save the trained model and feature names
+joblib.dump(model, "best_model.pkl")
+joblib.dump(list(X.columns), "feature_columns.pkl")
+
+print("✅ Random Forest model and features saved!")
+
+from google.colab import files
+files.download("best_model.pkl")
+files.download("feature_columns.pkl")
+
+
+
+!pip install -U scikit-learn
+
+# Drop irrelevant or all-null columns
+df.dropna(axis=1, how='all', inplace=True)
+df.drop(columns=[col for col in ['Date', 'date', 'Timestamp', 'timestamp', 'City', 'StationId', 'StationID', 'CityId','AQI_Bucket'] if col in df.columns], inplace=True)
+df.dropna(inplace=True)
+df.drop_duplicates(inplace=True)
+df.reset_index(drop=True, inplace=True)
+
+print(f"🧹 Cleaned data shape: {df.shape}")
+
+
+print("🔎 Head:\n", df.head())
+print("\nℹ️ Info:")
+df.info()
+print("\n❓ Nulls:\n", df.isna().sum())
+print("\n🧩 Duplicates:\n", df.duplicated().sum())
+print("\n📊 Describe:\n", df.describe())
+
+if 'AQI' in df.columns:
+    plt.figure(figsize=(10,5))
+    plt.hist(df['AQI'], bins=30, color='#800000')
+    plt.title("Distribution of AQI")
+    plt.xlabel("AQI")
+    plt.ylabel("Frequency")
+    plt.grid(True)
+    plt.show()
+else:
+    raise ValueError("⚠️ 'AQI' column not found!")
+
+
+
+target_col = 'AQI'
+X = df.drop(columns=[target_col])
+y = df[target_col]
+
+# Label encode any categorical feature columns
+for col in X.select_dtypes(include='object').columns:
+   X[col] = LabelEncoder().fit_transform(X[col])
+xtrain, xtest, ytrain, ytest = train_test_split(X, y, test_size=0.2, random_state=42)
+print(f"🧠 Features: {X.columns.tolist()}")
+print(f"📊 Train shape: {xtrain.shape}, Test shape: {xtest.shape}")
+
+
+models = {
+    'LinearRegression': LinearRegression(),
+    'DecisionTree': DecisionTreeRegressor(random_state=42),
+    'RandomForest': RandomForestRegressor(n_estimators=100, random_state=42),
+    'AdaBoost': AdaBoostRegressor(n_estimators=50, random_state=42),
+    'GradientBoosting': GradientBoostingRegressor(n_estimators=50, random_state=42),
+    'KNeighbors': KNeighborsRegressor(n_neighbors=5)
+}
+results = {'Model':[], 'Train_R2':[], 'Test_R2':[]}
+for name, model in models.items():
+    model.fit(xtrain, ytrain)
+    train_r2 = r2_score(ytrain, model.predict(xtrain)) * 100
+    test_r2 = r2_score(ytest, model.predict(xtest)) * 100
+    results['Model'].append(name)
+    results['Train_R2'].append(train_r2)
+    results['Test_R2'].append(test_r2)
+    print(f"{name} - Train R2: {train_r2:.2f}%, Test R2: {test_r2:.2f}%")
+
+score_df = pd.DataFrame(results)
+score_df
+
+
+
+plt.figure(figsize=(12,6))
+plt.bar(score_df['Model'], score_df['Train_R2'], color='maroon', alpha=0.7, label='Train R2')
+plt.bar(score_df['Model'], score_df['Test_R2'], color='orange', alpha=0.7, label='Test R2', bottom=score_df['Train_R2'])
+plt.ylabel('R2 Score (%)')
+plt.title('Model Training and Testing R2 Scores')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+best_model_name = score_df.loc[score_df['Test_R2'].idxmax(), 'Model']
+print(f"🏆 Best model based on Test R2: {best_model_name}")
+
+best_model = models[best_model_name]
+joblib.dump(best_model, 'best_model.pkl')
+joblib.dump(X.columns.tolist(), 'feature_columns.pkl')
+
+
+plt.figure(figsize=(12,6))
+plt.bar(score_df['Model'], score_df['Train_R2'], color='maroon', alpha=0.7, label='Train R2')
+plt.bar(score_df['Model'], score_df['Test_R2'], color='orange', alpha=0.7, label='Test R2', bottom=score_df['Train_R2'])
+plt.ylabel('R2 Score (%)')
+plt.title('Model Training and Testing R2 Scores')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+best_model_name = score_df.loc[score_df['Test_R2'].idxmax(), 'Model']
+print(f"🏆 Best model based on Test R2: {best_model_name}")
+
+best_model = models[best_model_name]
+joblib.dump(best_model, 'best_model.pkl')
+joblib.dump(X.columns.tolist(), 'feature_columns.pkl')
+
+
+
+import numpy as np
+
+plt.figure(figsize=(12,6))
+
+x = np.arange(len(score_df['Model']))
+width = 0.35
+
+# Train bars
+plt.bar(
+    x - width/2,
+    score_df['Train_R2'],
+    width,
+    color='maroon',
+    alpha=0.8,
+    label='Train R2'
+)
+
+# Test bars
+plt.bar(
+    x + width/2,
+    score_df['Test_R2'],
+    width,
+    color='orange',
+    alpha=0.8,
+    label='Test R2'
+)
+
+# Labels
+plt.xticks(x, score_df['Model'])
+
+plt.ylabel('R2 Score (%)')
+
+plt.title('Model Training and Testing R2 Scores')
+
+plt.legend()
+
+plt.grid(True)
+
+plt.show()
+
+# Best model selection
+best_model_name = score_df.loc[
+    score_df['Test_R2'].idxmax(),
+    'Model'
+]
+
+print(f"🏆 Best model based on Test R2: {best_model_name}")
+
+best_model = models[best_model_name]
+
+# Save files
+joblib.dump(best_model, 'best_model.pkl')
+
+joblib.dump(
+    X.columns.tolist(),
+    'feature_columns.pkl'
+)
+
+
+
+app_py_content = """
+import streamlit as st
+import pandas as pd
+import joblib
+
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(
+    page_title="AQI Predictor",
+    page_icon="🌍",
+    layout="wide"
+)
+
+# =========================
+# LOAD MODEL
+# =========================
+@st.cache_resource
+def load_model():
+    model = joblib.load("best_model.pkl")
+    feature_cols = joblib.load("feature_columns.pkl")
+    return model, feature_cols
+
+model, feature_cols = load_model()
+
+# =========================
+# CUSTOM CSS
+# =========================
+st.markdown('''
+<style>
+
+.main {
+    background-color: #0f172a;
+    color: white;
+}
+
+h1, h2, h3 {
+    color: white;
+}
+
+.stNumberInput label {
+    color: white !important;
+    font-weight: 600;
+}
+
+.stButton>button {
+    width: 100%;
+    background-color: #0072ff; /* Fallback color, removed linear-gradient */
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 12px;
+    border: none;
+    padding: 12px;
+    transition: 0.3s;
+}
+
+.stButton>button:hover {
+    transform: scale(1.02);
+    background-color: #00c6ff; /* Fallback color, removed linear-gradient */
+}
+
+.metric-card {
+    background-color: #1e293b;
+    padding: 15px;
+    border-radius: 15px;
+    text-align: center;
+    margin-bottom: 15px;
+    box-shadow: 0px 4px 15px rgba(0,0,0,0.3);
+}
+
+.result-box {
+    padding: 25px;
+    border-radius: 15px;
+    text-align: center;
+    font-size: 26px;
+    font-weight: bold;
+    color: white;
+    margin-top: 20px;
+}
+
+.small-text {
+    color: #cbd5e1;
+    font-size: 15px;
+}
+
+</style>
+''', unsafe_allow_html=True)
+
+# =========================
+# AQI SUGGESTIONS
+# =========================
+def get_suggestions(aqi_category):
+    suggestions = {
+        "🟢 Good": [
+            "Enjoy outdoor activities!",
+            "No specific health precautions needed."
+        ],
+        "🟡 Moderate": [
+            "Sensitive individuals should consider reducing prolonged or heavy exertion outdoors.",
+            "Watch for symptoms like coughing or shortness of breath."
+        ],
+        "🟠 Unhealthy for Sensitive Groups": [
+            "People with heart or lung disease, older adults, and children should reduce prolonged or heavy exertion.",
+            "Consider reducing time spent outdoors."
+        ],
+        "🔴 Unhealthy": [
+            "Everyone may begin to experience health effects; sensitive groups may experience more serious effects.",
+            "Avoid prolonged or heavy exertion outdoors. Consider wearing a mask if you must go outside."
+        ],
+        "🟣 Very Unhealthy": [
+            "Health warnings of emergency conditions. The entire population is more likely to be affected.",
+            "Avoid all physical activity outdoors. Stay indoors with windows and doors closed."
+        ],
+        "⚫ Hazardous": [
+            "Health alert: everyone may experience more serious health effects.",
+            "Remain indoors. Avoid all outdoor physical activity. Use air purifiers if available."
+        ]
+    }
+    return suggestions.get(aqi_category, ["No specific suggestions available for this category."])
+
+# =========================
+# PAGE NAVIGATION
+# =========================
+if 'page' not in st.session_state:
+    st.session_state.page = 'home'
+
+def navigate_to(page_name):
+    st.session_state.page = page_name
+
+# =========================
+# HOME PAGE
+# =========================
+if st.session_state.page == 'home':
+    st.markdown('''
+    # 🌍 Air Quality Index Predictor
+    ### AQI Prediction using the Best Performing ML Model
+    ''')
+
+    st.markdown(
+        "<p class='small-text'>Built using Streamlit and Machine Learning model comparison analysis.</p>",
+        unsafe_allow_html=True
+    )
+
+    st.sidebar.title("📘 About")
+    st.sidebar.info('''
+    This project predicts AQI using Machine Learning.
+
+    Multiple regression models were compared during analysis, and the best-performing model was selected for deployment.
+
+    Models compared:
+    - Linear Regression
+    - Random Forest
+    - AdaBoost
+    - Gradient Boosting
+    - KNN
+    ''')
+    st.sidebar.success("Developed by Aardra")
+
+    st.markdown('''
+<br>
+<p style="font-size: 1.2em;">Welcome to the Air Quality Index (AQI) Predictor! This tool allows you to estimate the AQI based on various pollutant levels. Understanding AQI is crucial for public health, as it indicates how clean or polluted the air is and what associated health effects might be a concern.</p>
+<p style="font-size: 1.2em;">Simply input the levels of different pollutants, and our machine learning model will predict the AQI, providing you with insights into air quality and relevant health suggestions.</p>
+<br>
+    ''', unsafe_allow_html=True)
+
+    if st.button("🚀 Start Prediction"):
+        navigate_to('predict')
+
+# =========================
+# PREDICT PAGE
+# =========================
+elif st.session_state.page == 'predict':
+    st.markdown("## 📥 Enter Pollutant Values")
+
+    cols = st.columns(2)
+    user_input = {}
+
+    for i, feature in enumerate(feature_cols):
+        with cols[i % 2]:
+            value = st.number_input(
+                f"{feature}",
+                min_value=0.0,
+                value=5.0,
+                step=0.1
+            )
+            user_input[feature] = value
+
+    input_df = pd.DataFrame([user_input])
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔙 Back to Home"):
+            navigate_to('home')
+
+    predict_button_pressed = False
+    with col2:
+        predict_button_pressed = st.button("🚀 Predict AQI")
+
+    if predict_button_pressed:
+        prediction = model.predict(input_df)[0]
+
+        if prediction <= 50:
+            category = "🟢 Good"
+            color = "#22c55e"
+        elif prediction <= 100:
+            category = "🟡 Moderate"
+            color = "#eab308"
+        elif prediction <= 150:
+            category = "🟠 Unhealthy for Sensitive Groups"
+            color = "#f97316"
+        elif prediction <= 200:
+            category = "🔴 Unhealthy"
+            color = "#ef4444"
+        elif prediction <= 300:
+            category = "🟣 Very Unhealthy"
+            color = "#a855f7"
+        else:
+            category = "⚫ Hazardous"
+            color = "#111827"
+
+        st.session_state.prediction_results = {
+            'prediction': prediction,
+            'category': category,
+            'color': color
+        }
+        navigate_to('results')
+    else:
+        st.info("Enter pollutant values and click Predict AQI.")
+
+# =========================
+# RESULTS PAGE
+# =========================
+elif st.session_state.page == 'results':
+    if 'prediction_results' in st.session_state:
+        prediction = st.session_state.prediction_results['prediction']
+        category = st.session_state.prediction_results['category']
+        color = st.session_state.prediction_results['color']
+
+        st.markdown("## ✨ Prediction Results")
+
+        # AQI NUMBER CARD
+        st.markdown(f'''
+        <div class="metric-card">
+            <h2>Predicted AQI</h2>
+            <h1 style="font-size:60px;">{prediction:.2f}</h1>
+        </div>
+        ''', unsafe_allow_html=True)
+
+        # AQI CATEGORY BOX
+        st.markdown(f'''
+        <div class="result-box" style="background-color:{color};">
+            {category}
+        </div>
+        ''', unsafe_allow_html=True)
+
+        st.success("Prediction completed successfully.")
+
+        st.markdown("### 💡 Relevant Suggestions")
+        for suggestion in get_suggestions(category):
+            st.info(f"- {suggestion}")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Predict Again"):
+            navigate_to('predict')
+    with col2:
+        if st.button("🏠 Back to Home"):
+            navigate_to('home')
+
+# =========================
+# FOOTER
+# =========================
+st.markdown("---")
+st.markdown(
+    "<center>🌱 AQI Prediction using Machine Learning</center>",
+    unsafe_allow_html=True
+)
+"""
+
+with open("app.py", "w") as f:
+    f.write(app_py_content)
+
+print("✅ `app.py` created successfully!")
+
+
+
+# Kill old processes
+!pkill ngrok
+!pkill streamlit
+
+# Start Streamlit in the background, redirecting output to a log file
+!streamlit run app.py > /content/streamlit.log 2>&1 &
+
+# Wait for Streamlit to start by checking its log file
+import time
+import re
+
+print("Waiting for Streamlit to start...")
+start_time = time.time()
+while True:
+    with open('/content/streamlit.log', 'r') as f:
+        log_content = f.read()
+    # Look for a message indicating Streamlit is running, e.g., 'You can now view your Streamlit app in your browser.'
+    if re.search("You can now view your Streamlit app in your browser", log_content):
+        print("Streamlit started!")
+        break
+    elif time.time() - start_time > 60: # Timeout after 60 seconds
+        print("Streamlit did not start in time. Check /content/streamlit.log for errors.")
+        break
+    time.sleep(2) # Check every 2 seconds
+
+# Start ngrok tunnel
+from pyngrok import ngrok
+
+# Set your ngrok authtoken here. Replace 'YOUR_NGROK_AUTH_TOKEN' with your actual token.
+# You can find your authtoken on your ngrok dashboard: https://dashboard.ngrok.com/auth/your-authtoken
+ngrok.set_auth_token("2wdfmQ2wX6YTgSjGKagDYTZL93R_7s13KVyLCaFpEtjDyjpz1")
+
+public_url = ngrok.connect(8501)
+
+print("🚀 Public URL:")
+print(public_url)
+
+
+from google.colab import files
+
+files.download("app.py")
+files.download("best_model.pkl")
+files.download("feature_columns.pkl")
+
